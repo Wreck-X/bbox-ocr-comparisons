@@ -1,0 +1,8 @@
+# Optional: LightOnOCR-2-1B integration.
+# Install separately: .venv/bin/pip install -r requirements-ocr.txt
+# First model load downloads ~2GB and takes a minute.
+torch>=2.4
+transformers>=4.57
+accelerate>=0.30
+Pillow>=10.0
+pymupdf>=1.24

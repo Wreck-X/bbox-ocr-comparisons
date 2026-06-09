@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Adobe PDF Extract Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs" type="module"></script>
+</head>
+<body>
+  <aside id="sidebar-left">
+    <header>
+      <h1>PDFs</h1>
+    </header>
+    <form id="upload-form">
+      <label class="upload-btn">
+        <input type="file" id="file-input" accept="application/pdf" multiple hidden />
+        + Upload PDF
+      </label>
+    </form>
+    <ul id="pdf-list"></ul>
+  </aside>
+
+  <main id="viewer">
+    <header id="toolbar">
+      <button id="prev-page" title="Previous page">&larr;</button>
+      <span id="page-info">— / —</span>
+      <button id="next-page" title="Next page">&rarr;</button>
+      <span class="divider"></span>
+      <button id="zoom-out">−</button>
+      <span id="zoom-info">100%</span>
+      <button id="zoom-in">+</button>
+      <span class="divider"></span>
+      <label class="backend-select">
+        Backend:
+        <select id="backend">
+          <option value="adobe">Adobe Extract</option>
+          <option value="doclayout">DocLayout-YOLO (Roboflow)</option>
+          <option value="mineru">MinerU Cloud (opendatalab)</option>
+          <option value="datalab">Datalab Marker</option>
+        </select>
+      </label>
+      <button id="run-doclayout" title="Run DocLayout-YOLO on this PDF">Run DocLayout</button>
+      <button id="run-mineru" title="Run MinerU Cloud on this PDF">Run MinerU</button>
+      <button id="run-datalab" title="Run Datalab Marker on this PDF">Run Datalab</button>
+      <span class="divider"></span>
+      <span id="doc-name" class="muted"></span>
+      <span id="doc-status" class="muted"></span>
+    </header>
+    <div id="canvas-wrap">
+      <div id="canvas-stage">
+        <canvas id="pdf-canvas"></canvas>
+        <div id="bbox-layer"></div>
+      </div>
+      <div id="empty-state">Upload a PDF to get started.</div>
+    </div>
+  </main>
+
+  <aside id="sidebar-right">
+    <header><h2>Element types</h2></header>
+    <div class="filter-actions">
+      <button id="filter-all">All</button>
+      <button id="filter-none">None</button>
+    </div>
+    <label class="char-toggle">
+      <input type="checkbox" id="char-bounds-toggle" />
+      Show character bounds
+    </label>
+    <label class="char-toggle">
+      <input type="checkbox" id="hide-containers-toggle" checked />
+      Hide nested containers
+    </label>
+    <ul id="type-list"></ul>
+    <div id="hover-info"></div>
+  </aside>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

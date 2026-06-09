@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data
+data/
+
+# Editor / tooling
+.omnitype/
+.vscode/
+.idea/
+*.swp
+.DS_Store
