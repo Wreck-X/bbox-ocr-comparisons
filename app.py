@@ -19,6 +19,7 @@ from mineru_extract import MinerUError, extract_pdf_mineru, normalize_cached as 
 from datalab_extract import DatalabError, extract_pdf_datalab, normalize_cached as datalab_renormalize
 from llamaparse_extract import LlamaParseError, extract_pdf_llamaparse, normalize_cached as llamaparse_renormalize
 from upstage_extract import UpstageError, extract_pdf_upstage, normalize_cached as upstage_renormalize
+from glm_extract import GLMError, extract_pdf_glm, normalize_cached as glm_renormalize
 
 load_dotenv()
 
@@ -34,6 +35,8 @@ MINERU_API_TOKEN = os.environ.get("MINERU_API_TOKEN", "").strip()
 DATALAB_API_KEY = os.environ.get("DATALAB_API_KEY", "").strip()
 LLAMAPARSE_API_KEY = os.environ.get("LLAMAPARSE_API_KEY", "").strip()
 UPSTAGE_API_KEY = os.environ.get("UPSTAGE_API_KEY", "").strip()
+GLM_API_KEY = os.environ.get("GLM_API_KEY", "").strip()
+GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4v-plus").strip()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
@@ -182,6 +185,27 @@ def _run_upstage(pdf_id: str) -> None:
         _set_job(key, "failed", f"{type(e).__name__}: {e}")
 
 
+def _run_glm(pdf_id: str) -> None:
+    key = _job_key(pdf_id, "glm")
+    try:
+        pdf_dir = DATA_DIR / pdf_id
+        raw_path = pdf_dir / "glm_raw.json"
+        if raw_path.exists():
+            result = glm_renormalize(str(raw_path))
+        else:
+            assert GLM_API_KEY, "GLM_API_KEY not set"
+            pdf_bytes = (pdf_dir / "source.pdf").read_bytes()
+            result = extract_pdf_glm(
+                pdf_bytes, GLM_API_KEY, model=GLM_MODEL, raw_out_path=str(raw_path),
+            )
+        (pdf_dir / "glm.json").write_text(json.dumps(result))
+        _set_job(key, "done")
+    except (GLMError, AssertionError) as e:
+        _set_job(key, "failed", str(e))
+    except Exception as e:  # noqa: BLE001
+        _set_job(key, "failed", f"{type(e).__name__}: {e}")
+
+
 def _list_pdfs() -> list[dict[str, Any]]:
     out = []
     for d in sorted(DATA_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -215,6 +239,10 @@ def _list_pdfs() -> list[dict[str, Any]]:
         up_status = up_job.get("status")
         if not up_status:
             up_status = "done" if (d / "upstage.json").exists() else "none"
+        gl_job = _get_job(_job_key(d.name, "glm"))
+        gl_status = gl_job.get("status")
+        if not gl_status:
+            gl_status = "done" if (d / "glm.json").exists() else "none"
         out.append({
             "id": d.name,
             "filename": meta.get("filename"),
@@ -230,6 +258,8 @@ def _list_pdfs() -> list[dict[str, Any]]:
             "llamaparse_error": lp_job.get("error"),
             "upstage_status": up_status,
             "upstage_error": up_job.get("error"),
+            "glm_status": gl_status,
+            "glm_error": gl_job.get("error"),
         })
     return out
 
@@ -480,6 +510,41 @@ def upstage_status_route(pdf_id: str):
     key = _job_key(pdf_id, "upstage")
     job = _get_job(key)
     status = job.get("status") or ("done" if (pdf_dir / "upstage.json").exists() else "none")
+    return jsonify({"status": status, "error": job.get("error")})
+
+
+@app.route("/api/pdfs/<pdf_id>/glm", methods=["POST"])
+def glm_run(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    if not (pdf_dir / "source.pdf").exists():
+        abort(404)
+    if not GLM_API_KEY and not (pdf_dir / "glm_raw.json").exists():
+        return jsonify({"error": "GLM_API_KEY not set in .env (get one at https://open.bigmodel.cn/usercenter/apikeys)"}), 500
+    key = _job_key(pdf_id, "glm")
+    if _get_job(key).get("status") == "processing":
+        return jsonify({"status": "processing"}), 202
+    _set_job(key, "processing")
+    threading.Thread(target=_run_glm, args=(pdf_id,), daemon=True).start()
+    return jsonify({"status": "processing"}), 202
+
+
+@app.route("/api/pdfs/<pdf_id>/glm", methods=["GET"])
+def glm_get(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    path = pdf_dir / "glm.json"
+    if not path.exists():
+        abort(404)
+    return send_from_directory(pdf_dir, "glm.json", mimetype="application/json")
+
+
+@app.route("/api/pdfs/<pdf_id>/glm/status")
+def glm_status_route(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    if not pdf_dir.exists():
+        abort(404)
+    key = _job_key(pdf_id, "glm")
+    job = _get_job(key)
+    status = job.get("status") or ("done" if (pdf_dir / "glm.json").exists() else "none")
     return jsonify({"status": status, "error": job.get("error")})
 
 
