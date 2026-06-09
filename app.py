@@ -36,7 +36,7 @@ DATALAB_API_KEY = os.environ.get("DATALAB_API_KEY", "").strip()
 LLAMAPARSE_API_KEY = os.environ.get("LLAMAPARSE_API_KEY", "").strip()
 UPSTAGE_API_KEY = os.environ.get("UPSTAGE_API_KEY", "").strip()
 GLM_API_KEY = os.environ.get("GLM_API_KEY", "").strip()
-GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4v-plus").strip()
+GLM_MODEL = os.environ.get("GLM_MODEL", "glm-4v").strip()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB

@@ -156,7 +156,7 @@ def _normalize(per_page: list[dict[str, Any]]) -> dict[str, Any]:
     return {"pages": pages_meta, "elements": elements, "source": "glm-ocr"}
 
 
-def extract_pdf_glm(pdf_bytes: bytes, api_key: str, model: str = "glm-4v-plus",
+def extract_pdf_glm(pdf_bytes: bytes, api_key: str, model: str = "glm-4v",
                     raw_out_path: str | None = None) -> dict[str, Any]:
     per_page: list[dict[str, Any]] = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
