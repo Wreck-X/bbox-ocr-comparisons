@@ -44,6 +44,7 @@ const els = {
   runDoclayout: document.getElementById("run-doclayout"),
   runMineru: document.getElementById("run-mineru"),
   runDatalab: document.getElementById("run-datalab"),
+  runLlamaparse: document.getElementById("run-llamaparse"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -207,7 +208,7 @@ async function selectPdf(id) {
 }
 
 async function loadExtract(id) {
-  const backendPaths = { adobe: "extract", doclayout: "doclayout", mineru: "mineru", datalab: "datalab" };
+  const backendPaths = { adobe: "extract", doclayout: "doclayout", mineru: "mineru", datalab: "datalab", llamaparse: "llamaparse" };
   const path = backendPaths[state.backend] || "extract";
   const r = await fetch(`/api/pdfs/${id}/${path}`);
   if (!r.ok) {
@@ -219,6 +220,7 @@ async function loadExtract(id) {
       doclayout: "no DocLayout results yet — click 'Run DocLayout'",
       mineru: "no MinerU results yet — click 'Run MinerU'",
       datalab: "no Datalab results yet — click 'Run Datalab'",
+      llamaparse: "no LlamaParse results yet — click 'Run LlamaParse'",
     };
     els.docStatus.textContent = hints[state.backend] || "no results";
     return;
@@ -353,10 +355,27 @@ els.runDatalab.addEventListener("click", async () => {
   }
 });
 
+els.runLlamaparse.addEventListener("click", async () => {
+  if (!state.currentId) return alert("Pick a PDF first");
+  els.runLlamaparse.disabled = true;
+  els.docStatus.textContent = "LlamaParse running… (cloud processing, ~30s+)";
+  try {
+    const r = await fetch(`/api/pdfs/${state.currentId}/llamaparse`, { method: "POST" });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `HTTP ${r.status}`);
+    }
+    pollBackend(state.currentId, "llamaparse");
+  } catch (e) {
+    els.docStatus.textContent = `LlamaParse failed: ${e.message}`;
+    els.runLlamaparse.disabled = false;
+  }
+});
+
 function pollBackend(id, backend) {
   const key = `${backend}:${id}`;
   if (state.pollTimers.has(key)) return;
-  const btnMap = { mineru: els.runMineru, doclayout: els.runDoclayout, datalab: els.runDatalab };
+  const btnMap = { mineru: els.runMineru, doclayout: els.runDoclayout, datalab: els.runDatalab, llamaparse: els.runLlamaparse };
   const btn = btnMap[backend] || els.runDoclayout;
   const tick = async () => {
     try {

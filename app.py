@@ -17,6 +17,7 @@ from adobe_extract import ExtractError, extract_pdf
 from roboflow_doclayout import RoboflowError, extract_pdf_layout
 from mineru_extract import MinerUError, extract_pdf_mineru, normalize_cached as mineru_renormalize
 from datalab_extract import DatalabError, extract_pdf_datalab, normalize_cached as datalab_renormalize
+from llamaparse_extract import LlamaParseError, extract_pdf_llamaparse, normalize_cached as llamaparse_renormalize
 
 load_dotenv()
 
@@ -30,6 +31,7 @@ ROBOFLOW_API_KEY = os.environ.get("ROBOFLOW_API_KEY", "").strip()
 ROBOFLOW_MODEL = os.environ.get("ROBOFLOW_MODEL", "jaswanth-kwujz/doclayout-yolo/3").strip()
 MINERU_API_TOKEN = os.environ.get("MINERU_API_TOKEN", "").strip()
 DATALAB_API_KEY = os.environ.get("DATALAB_API_KEY", "").strip()
+LLAMAPARSE_API_KEY = os.environ.get("LLAMAPARSE_API_KEY", "").strip()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
@@ -132,6 +134,29 @@ def _run_datalab(pdf_id: str) -> None:
         _set_job(key, "failed", f"{type(e).__name__}: {e}")
 
 
+def _run_llamaparse(pdf_id: str) -> None:
+    key = _job_key(pdf_id, "llamaparse")
+    try:
+        pdf_dir = DATA_DIR / pdf_id
+        raw_path = pdf_dir / "llamaparse_raw.json"
+        if raw_path.exists():
+            result = llamaparse_renormalize(str(raw_path))
+        else:
+            assert LLAMAPARSE_API_KEY, "LLAMAPARSE_API_KEY not set"
+            pdf_bytes = (pdf_dir / "source.pdf").read_bytes()
+            meta = json.loads((pdf_dir / "meta.json").read_text())
+            filename = meta.get("filename") or "document.pdf"
+            result = extract_pdf_llamaparse(
+                pdf_bytes, filename, LLAMAPARSE_API_KEY, raw_out_path=str(raw_path),
+            )
+        (pdf_dir / "llamaparse.json").write_text(json.dumps(result))
+        _set_job(key, "done")
+    except (LlamaParseError, AssertionError) as e:
+        _set_job(key, "failed", str(e))
+    except Exception as e:  # noqa: BLE001
+        _set_job(key, "failed", f"{type(e).__name__}: {e}")
+
+
 def _list_pdfs() -> list[dict[str, Any]]:
     out = []
     for d in sorted(DATA_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -157,6 +182,10 @@ def _list_pdfs() -> list[dict[str, Any]]:
         dt_status = dt_job.get("status")
         if not dt_status:
             dt_status = "done" if (d / "datalab.json").exists() else "none"
+        lp_job = _get_job(_job_key(d.name, "llamaparse"))
+        lp_status = lp_job.get("status")
+        if not lp_status:
+            lp_status = "done" if (d / "llamaparse.json").exists() else "none"
         out.append({
             "id": d.name,
             "filename": meta.get("filename"),
@@ -168,6 +197,8 @@ def _list_pdfs() -> list[dict[str, Any]]:
             "mineru_error": mu_job.get("error"),
             "datalab_status": dt_status,
             "datalab_error": dt_job.get("error"),
+            "llamaparse_status": lp_status,
+            "llamaparse_error": lp_job.get("error"),
         })
     return out
 
@@ -348,6 +379,41 @@ def datalab_status_route(pdf_id: str):
     key = _job_key(pdf_id, "datalab")
     job = _get_job(key)
     status = job.get("status") or ("done" if (pdf_dir / "datalab.json").exists() else "none")
+    return jsonify({"status": status, "error": job.get("error")})
+
+
+@app.route("/api/pdfs/<pdf_id>/llamaparse", methods=["POST"])
+def llamaparse_run(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    if not (pdf_dir / "source.pdf").exists():
+        abort(404)
+    if not LLAMAPARSE_API_KEY and not (pdf_dir / "llamaparse_raw.json").exists():
+        return jsonify({"error": "LLAMAPARSE_API_KEY not set in .env (get one at https://cloud.llamaindex.ai/api-key)"}), 500
+    key = _job_key(pdf_id, "llamaparse")
+    if _get_job(key).get("status") == "processing":
+        return jsonify({"status": "processing"}), 202
+    _set_job(key, "processing")
+    threading.Thread(target=_run_llamaparse, args=(pdf_id,), daemon=True).start()
+    return jsonify({"status": "processing"}), 202
+
+
+@app.route("/api/pdfs/<pdf_id>/llamaparse", methods=["GET"])
+def llamaparse_get(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    path = pdf_dir / "llamaparse.json"
+    if not path.exists():
+        abort(404)
+    return send_from_directory(pdf_dir, "llamaparse.json", mimetype="application/json")
+
+
+@app.route("/api/pdfs/<pdf_id>/llamaparse/status")
+def llamaparse_status_route(pdf_id: str):
+    pdf_dir = DATA_DIR / pdf_id
+    if not pdf_dir.exists():
+        abort(404)
+    key = _job_key(pdf_id, "llamaparse")
+    job = _get_job(key)
+    status = job.get("status") or ("done" if (pdf_dir / "llamaparse.json").exists() else "none")
     return jsonify({"status": status, "error": job.get("error")})
 
 
